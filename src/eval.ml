@@ -72,9 +72,16 @@ let rec eval_expr env t =
               else if a < 0 && b mod 2 <> 0 then -1
               else 0
             else
-              let rec loop n acc =
-                if n = 0 then acc else loop (n - 1) (acc * a)
-              in loop b 1
+              let rec power base exponent accumulator =
+                if exponent = 0 then accumulator
+                else
+                  let next_accumulator =
+                    if exponent mod 2 = 0 then accumulator
+                    else accumulator * base
+                  in
+                  power (base * base) (exponent / 2) next_accumulator
+              in
+              power a b 1
           in
           Int_Val result
       | _ -> raise (TypeError "Pow requires integer operands"))
@@ -137,7 +144,13 @@ let rec eval_expr env t =
       if List.length args <> List.length params then
         raise (TypeError ("Function " ^ name ^ " expects " ^ string_of_int (List.length params) ^ " arguments"))
       else
-        let evaluated_args = List.map (eval_expr env) args in
+        let rec evaluate_args = function
+          | [] -> []
+          | arg :: rest ->
+              let value = eval_expr env arg in
+              value :: evaluate_args rest
+        in
+        let evaluated_args = evaluate_args args in
         let checked_pairs =
           List.map2 (fun (param_name, param_type) arg_val ->
             let actual_type = type_of_value arg_val in
@@ -187,32 +200,29 @@ and eval_stmt env s =
       let end_val = eval_expr env end_expr in
       (match start_val, end_val with
       | Int_Val start_i, Int_Val end_i ->
-          if start_i > end_i then env
-          else
-            (match List.assoc_opt name env.bindings with
-            | None -> raise (DeclareError ("Undefined loop variable: " ^ name))
-            | Some _ ->
-                let rec loop current_env current =
-                  if current > end_i then current_env
-                  else
-                    let bound_env =
-                      { current_env with
-                        bindings = (name, Int_Val current) :: List.remove_assoc name current_env.bindings }
-                    in
-                    let after_body = eval_stmt bound_env body in
-                    let next_value =
-                      match List.assoc_opt name after_body.bindings with
-                      | Some (Int_Val v) -> v + 1
-                      | Some _ -> raise (TypeError ("For loop variable must be an integer: " ^ name))
-                      | None -> raise (DeclareError ("Loop variable was lost: " ^ name))
-                    in
-                    let updated_env =
-                      { after_body with
-                        bindings = (name, Int_Val next_value) :: List.remove_assoc name after_body.bindings }
-                    in
-                    loop updated_env next_value
-                in
-                loop env start_i)
+          let rec loop current_env current =
+            if current > end_i then
+              { current_env with
+                bindings = (name, Int_Val current) :: List.remove_assoc name current_env.bindings }
+            else
+              let bound_env =
+                { current_env with
+                  bindings = (name, Int_Val current) :: List.remove_assoc name current_env.bindings }
+              in
+              let after_body = eval_stmt bound_env body in
+              let next_value =
+                match List.assoc_opt name after_body.bindings with
+                | Some (Int_Val v) -> v + 1
+                | Some _ -> raise (TypeError ("For loop variable must be an integer: " ^ name))
+                | None -> raise (DeclareError ("Loop variable was lost: " ^ name))
+              in
+              let updated_env =
+                { after_body with
+                  bindings = (name, Int_Val next_value) :: List.remove_assoc name after_body.bindings }
+              in
+              loop updated_env next_value
+          in
+          loop env start_i
       | _ -> raise (TypeError "For loop bounds must be integers"))
   | While (guard, body) ->
       (match eval_expr env guard with
@@ -239,5 +249,8 @@ let rec eval env d =
   match d with
   | Multi (left, right) -> eval (eval env left) right
   | Fun (ret_type, name, params, body) ->
-      { env with defns = (name, (ret_type, params, body)) :: env.defns }
+      if List.mem_assoc name env.defns then
+        raise (DeclareError ("Function already defined: " ^ name))
+      else
+        { env with defns = (name, (ret_type, params, body)) :: env.defns }
   | Main body -> eval_stmt env body
