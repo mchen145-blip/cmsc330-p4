@@ -17,7 +17,7 @@ let string_of_defn = show_defn
 
 (* this can definitely be rewritten :sob: *)
 let string_of_list ?newline:(newline=false) (f : 'a -> string) (l : 'a list) : string =
-  "[" ^ (String.concat ", " @@ List.map f l) ^ "]" ^ (if newline then "\n" else "");;
+  "[" ^ (String.concat ", " @@ List.map f l) ^ "]" ^ (if newline then "\n" else "")
 
 (**********************************
  * BEGIN ACTUAL PARSE HELPER CODE *
@@ -40,7 +40,7 @@ let tokenize_from_channel (c : in_channel) : token list =
 let tokenize_from_file (filename : string) : token list =
   let c = open_in filename in
   let s = tokenize_from_channel c in
-  close_in c;
+  let () = close_in c in
   s
 
 
@@ -51,14 +51,14 @@ let tokenize_from_file (filename : string) : token list =
 (* Buffers for testing prints *)
 let (print_buffer : Buffer.t) = Buffer.create 100
 
-let flush_print_buffer () : unit = Buffer.clear print_buffer;;
+let flush_print_buffer () : unit = Buffer.clear print_buffer
 let assert_buffer_equal (s : string) : unit =
   let c = Buffer.contents print_buffer in
-  if not (s = c) then failwith ("Printed: '" ^ c ^ "' Expected:'" ^ s ^ "'");;
+  if not (s = c) then failwith ("Printed: '" ^ c ^ "' Expected:'" ^ s ^ "'") else ()
 
 (* This is the print you must use for the project *)
 let print_output_string (s : string) : unit =
-  Buffer.add_string print_buffer s;
+  let () = Buffer.add_string print_buffer s in
   Stdlib.print_string s
 
 let print_output_int (i : int) : unit =
@@ -75,9 +75,13 @@ let read_from_file (input_filename : string) : string =
     let ic = open_in name in
     let try_read () =
       try Some (input_line ic) with End_of_file -> None in
-    let rec loop acc = match try_read () with
+    let rec loop acc =
+      match try_read () with
       | Some s -> loop (s :: acc)
-      | None -> close_in ic; List.rev acc in
+      | None ->
+          let () = close_in ic in
+          List.rev acc
+    in
     loop []
   in
   (* Read the file into lines *)
@@ -122,10 +126,6 @@ let prune_env env =
 (* Eval report print function *)
 
 let print_eval_env_report (env : environment): unit =
-
-  print_string "*** BEGIN POST-EXECUTION ENVIRONMENT REPORT ***\n";
-
-  (* i hope this isn't ugly *)
-  env |> show_environment |> print_string;
-
+  let () = print_string "*** BEGIN POST-EXECUTION ENVIRONMENT REPORT ***\n" in
+  let () = env |> show_environment |> print_string in
   print_string "***  END POST-EXECUTION ENVIRONMENT REPORT  ***\n"

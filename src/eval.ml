@@ -66,8 +66,11 @@ let rec eval_expr env t =
       | Int_Val a, Int_Val b ->
           let result =
             if b < 0 then
-              let f = (float_of_int a) ** (float_of_int b) in
-              int_of_float (floor f)
+              if a = 0 then raise DivByZeroError
+              else if a = 1 then 1
+              else if a = -1 then if b mod 2 = 0 then 1 else -1
+              else if a < 0 && b mod 2 <> 0 then -1
+              else 0
             else
               let rec loop n acc =
                 if n = 0 then acc else loop (n - 1) (acc * a)
@@ -131,10 +134,10 @@ let rec eval_expr env t =
       | _ -> raise (TypeError "Not requires a boolean operand"))
   | Call (name, args) ->
       let (ret_type, params, body) = lookup_defn env name in
-      let evaluated_args = List.map (eval_expr env) args in
-      if List.length evaluated_args <> List.length params then
+      if List.length args <> List.length params then
         raise (TypeError ("Function " ^ name ^ " expects " ^ string_of_int (List.length params) ^ " arguments"))
       else
+        let evaluated_args = List.map (eval_expr env) args in
         let checked_pairs =
           List.map2 (fun (param_name, param_type) arg_val ->
             let actual_type = type_of_value arg_val in
@@ -221,12 +224,12 @@ and eval_stmt env s =
   | Print expr ->
       (match eval_expr env expr with
       | Int_Val v ->
-          print_output_int v;
-          print_output_newline ();
+          let () = print_output_int v in
+          let () = print_output_newline () in
           env
       | Bool_Val b ->
-          print_output_bool b;
-          print_output_newline ();
+          let () = print_output_bool b in
+          let () = print_output_newline () in
           env)
   | Return expr ->
       let value = eval_expr env expr in

@@ -140,6 +140,11 @@ and parse_args toks : token list * expr list =
       match lookahead toks with
       | Tok_Comma ->
           let toks = match_token toks Tok_Comma in
+          let () =
+            match lookahead toks with
+            | Tok_RParen -> raise (InvalidInputException "Trailing comma in argument list")
+            | _ -> ()
+          in
           let toks, rest = parse_args toks in
           (toks, e :: rest)
       | Tok_RParen -> (toks, [e])
@@ -284,6 +289,11 @@ and parse_defs toks : token list * defn =
         (match lookahead toks with
         | Tok_Comma ->
             let toks = match_token toks Tok_Comma in
+            let () =
+              match lookahead toks with
+              | Tok_RParen -> raise (InvalidInputException "Trailing comma in parameter list")
+              | _ -> ()
+            in
             parse_param_list toks (name :: used_names) acc
         | Tok_RParen -> (toks, List.rev acc)
         | _ -> raise (InvalidInputException "Malformed parameter list"))
@@ -358,18 +368,22 @@ and parse_defs toks : token list * defn =
         | Tok_Main ->
             let toks, main_ast = parse_main toks in
             (toks, main_ast)
-        | Tok_ID name ->
-            let toks, fun_ast = parse_fun toks in
-            (match fun_ast with
-            | Fun (_, fname, _, _) ->
-                if List.mem fname seen then raise (InvalidInputException "Function overloading is not permitted")
-                else
-                  let toks, rest = loop toks (fname :: seen) in
-                  (toks, Multi (fun_ast, rest))
-            | _ -> raise (InvalidInputException "Unexpected definition"))
+        | Tok_ID _ -> parse_function toks seen
         | _ -> raise (InvalidInputException "Expected function or main definition"))
+    | Tok_Bool_Type -> parse_function toks seen
     | _ -> raise (InvalidInputException "Expected function definition")
+  and parse_function toks seen : token list * defn =
+    let toks, fun_ast = parse_fun toks in
+    match fun_ast with
+    | Fun (_, name, _, _) ->
+        if List.mem name seen then
+          raise (InvalidInputException "Function overloading is not permitted")
+        else
+          let toks, rest = loop toks (name :: seen) in
+          (toks, Multi (fun_ast, rest))
+    | _ -> raise (InvalidInputException "Unexpected definition")
   in
   let toks, ast = loop toks [] in
-  if lookahead toks = EOF then (toks, ast)
-  else raise (InvalidInputException "Unexpected trailing tokens after main")
+  match toks with
+  | [EOF] -> (toks, ast)
+  | _ -> raise (InvalidInputException "Unexpected trailing tokens after main")
